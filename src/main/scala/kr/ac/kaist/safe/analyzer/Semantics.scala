@@ -107,6 +107,11 @@ case class Semantics(
           map2 + (cp2 -> (data ⊔ oldData))
       }
     }
+    val irCp1 = cp1.block.func.ir
+    val irCp2 = cp2.block.func.ir
+    println("Add IPEdge")
+    println("From :" + irCp1.fileName + ":" + irCp1.line + ":" + irCp1.offset)
+    println("To : " + irCp2.fileName + ":" + irCp2.line + ":" + irCp2.offset)
     ipSuccMap += (cp1 -> updatedSuccMap)
   }
 
