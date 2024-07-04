@@ -45,6 +45,7 @@ class Fixpoint(
     val cp = worklist.pop
     val st = semantics.getState(cp)
     val (nextSt, nextExcSt) = semantics.C(cp, st)
+
     propagateNormal(cp, nextSt)
     propagateException(cp, nextExcSt)
     propagateInterProc(cp, nextSt)

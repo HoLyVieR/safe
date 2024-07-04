@@ -127,7 +127,7 @@ object DefaultState extends StateDomain {
         case CapturedCatchVar =>
           val collapsedEnv = context.getOrElse(COLLAPSED, AbsLexEnv.Bot)
           collapsedEnv.record.decEnvRec.GetBindingValue(x)
-        case GlobalVar => AbsGlobalEnvRec.Top.GetBindingValue(x, true)(heap)
+        case GlobalVar => AbsGlobalEnvRec.Top.GetBindingValue(x, false)(heap)
       }
     }
 

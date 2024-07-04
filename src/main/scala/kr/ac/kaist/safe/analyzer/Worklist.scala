@@ -61,6 +61,7 @@ case class Worklist(cfg: CFG) {
   def add(cp: ControlPoint): Unit = {
     val order = getOrder(cp.block)
     val newWork = Work(order, cp)
+
     if (!(worklist contains newWork))
       worklist = (newWork :: worklist).sortWith((w1, w2) => w1 < w2)
   }
@@ -70,6 +71,9 @@ case class Worklist(cfg: CFG) {
   }
 
   def pop: ControlPoint = {
+    println("POP - ")
+    println(worklist.head)
+
     val removedHead = worklist.head.cp
     worklist = worklist.tail
     removedHead

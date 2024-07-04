@@ -658,6 +658,7 @@ case class Semantics(
         val excSet =
           if (attrV.pvalue.isBottom) ExcSetEmpty
           else Set(TypeError)
+
         val attr = h.get(attrV.locset)
         val desc = AbsDesc.ToPropertyDescriptor(attr, h)
         val (retH, retExcSet) = objV.locset.foldLeft((h, excSet ++ excSetO ++ excSetP ++ excSetA)) {
@@ -778,7 +779,7 @@ case class Semantics(
         val excSet2: Set[Exception] =
           if (objV.pvalue.isBottom) ExcSetEmpty
           else Set(TypeError)
-
+        
         // 2. Let array be the result of creating a new Array object.
         // (XXX: we assign the length of the Array object as the number of properties)
         val uint = "(0|[1-9][0-9]*)".r
@@ -1453,6 +1454,36 @@ case class Semantics(
       val cpAfterCall = ControlPoint(nCall.afterCall, tp)
       val cpAfterCatch = ControlPoint(nCall.afterCatch, tp)
 
+      // Add edge so that call to unknown are considered as returning "anything is possible"
+      // HERE
+      var isTop = funLocSet.isTop;
+
+      funLocSet.getSingle match {
+        case ConZero => {
+          isTop = true;
+        }
+
+        case ConOne(x) => {
+          if (x.isTop) {
+            isTop = true;
+          }
+        }
+
+        case ConMany => {
+          isTop = false
+        }
+      }
+
+      if (isTop) {
+        //val newEnv = AbsLexEnv.newPureLocal(LocSet(loc))
+        val afterCallBlock = cpAfterCall.block.asInstanceOf[AfterCall]
+        val cpBlock = cp.block
+        cpBlock.addSucc(CFGEdgeNormal, afterCallBlock)
+        afterCallBlock.addPred(CFGEdgeNormal, cpBlock)
+        val retSt = st.varStore(afterCallBlock.retVar, AbsPValue.Top)
+        return (thisVal, argVal, retSt, excSt)
+      }
+
       // Draw call/return edges
       funLocSet.foreach((fLoc) => {
         val funObj = st1.heap.get(fLoc)
@@ -1462,6 +1493,7 @@ case class Semantics(
           case _: CFGCall =>
             funObj(ICall).fidset
         }
+
         fidSet.foreach((fid) => {
           cfg.getFunc(fid) match {
             case Some(funCFG) => {
@@ -1527,122 +1559,126 @@ case class Semantics(
     }
   }
 
-  def V(expr: CFGExpr, st: AbsState): (AbsValue, Set[Exception]) = expr match {
-    case CFGVarRef(ir, id) => st.lookup(id)
-    case CFGLoad(ir, obj, index) => {
-      val (objV, _) = V(obj, st)
-      val (idxV, idxExcSet) = V(index, st)
-      val absStrSet =
-        if (!idxV.isBottom) TypeConversionHelper.ToPrimitive(idxV, st.heap).toStringSet
-        else Set[AbsStr]()
-      val v1 = Helper.propLoad(objV, absStrSet, st.heap)
-      (v1, idxExcSet)
-    }
-    case CFGThis(ir) =>
-      (st.context.thisBinding, ExcSetEmpty)
-    case CFGBin(ir, expr1, op, expr2) => {
-      val (v1, excSet1) = V(expr1, st)
-      val (v2, excSet2) = V(expr2, st)
-      (v1, v2) match {
-        case _ if v1.isBottom => (AbsValue.Bot, excSet1)
-        case _ if v2.isBottom => (AbsValue.Bot, excSet1 ++ excSet2)
-        case _ =>
-          val h = st.heap
-          op.name match {
-            case "|" => (Helper.bopBitOr(v1, v2), excSet1 ++ excSet2)
-            case "&" => (Helper.bopBitAnd(v1, v2), excSet1 ++ excSet2)
-            case "^" => (Helper.bopBitXor(v1, v2), excSet1 ++ excSet2)
-            case "<<" => (Helper.bopLShift(v1, v2), excSet1 ++ excSet2)
-            case ">>" => (Helper.bopRShift(v1, v2), excSet1 ++ excSet2)
-            case ">>>" => (Helper.bopURShift(v1, v2), excSet1 ++ excSet2)
-            case "+" => (Helper.bopPlus(v1, v2), excSet1 ++ excSet2)
-            case "-" => (Helper.bopMinus(v1, v2), excSet1 ++ excSet2)
-            case "*" => (Helper.bopMul(v1, v2), excSet1 ++ excSet2)
-            case "/" => (Helper.bopDiv(v1, v2), excSet1 ++ excSet2)
-            case "%" => (Helper.bopMod(v1, v2), excSet1 ++ excSet2)
-            case "==" => (Helper.bopEqBetter(h, v1, v2), excSet1 ++ excSet2)
-            case "!=" => (Helper.bopNeq(h, v1, v2), excSet1 ++ excSet2)
-            case "===" => (Helper.bopSEq(h, v1, v2), excSet1 ++ excSet2)
-            case "!==" => (Helper.bopSNeq(h, v1, v2), excSet1 ++ excSet2)
-            case "<" => (Helper.bopLess(v1, v2), excSet1 ++ excSet2)
-            case ">" => (Helper.bopGreater(v1, v2), excSet1 ++ excSet2)
-            case "<=" => (Helper.bopLessEq(v1, v2), excSet1 ++ excSet2)
-            case ">=" => (Helper.bopGreaterEq(v1, v2), excSet1 ++ excSet2)
-            case "instanceof" =>
-              val locSet1 = v1.locset
-              val locSet2 = v2.locset
-              val locSet3 = locSet2.filter((l) => AT ⊑ st.heap.hasInstance(l))
-              val protoVal = locSet3.foldLeft(AbsValue.Bot)((v, l) => {
-                v ⊔ st.heap.get(l).Get("prototype", st.heap)
-              })
-              val locSet4 = protoVal.locset
-              val locSet5 = locSet2.filter((l) => AF ⊑ st.heap.hasInstance(l))
-              val b1 = locSet1.foldLeft[AbsValue](AbsValue.Bot)((tmpVal1, loc1) => {
-                locSet4.foldLeft[AbsValue](tmpVal1)((tmpVal2, loc2) =>
-                  tmpVal2 ⊔ Helper.inherit(st.heap, loc1, loc2))
-              })
-              val b2 =
-                if (!v1.pvalue.isBottom && !locSet4.isBottom) AbsValue(AF)
-                else AbsValue.Bot
-              val excSet3 =
-                if (!v2.pvalue.isBottom || !locSet5.isBottom || !protoVal.pvalue.isBottom) Set(TypeError)
-                else ExcSetEmpty
-              val b = b1 ⊔ b2
-              val excSet = excSet1 ++ excSet2 ++ excSet3
-              (b, excSet)
-            case "in" => {
-              val str = TypeConversionHelper.ToString(v1, st.heap)
-              val absB = v2.locset.foldLeft(AB)((tmpAbsB, loc) => {
-                tmpAbsB ⊔ st.heap.get(loc).HasProperty(str, st.heap)
-              })
-              val b = AbsValue(absB)
-              val excSet3 =
-                if (!v2.pvalue.isBottom) Set(TypeError)
-                else ExcSetEmpty
-              val excSet = excSet1 ++ excSet2 ++ excSet3
-              (b, excSet)
+  def V(expr: CFGExpr, st: AbsState): (AbsValue, Set[Exception]) = {
+    expr match {
+      case CFGVarRef(ir, id) => st.lookup(id)
+      case CFGLoad(ir, obj, index) => {
+        val (objV, _) = V(obj, st)
+        val (idxV, idxExcSet) = V(index, st)
+        val absStrSet =
+          if (!idxV.isBottom) TypeConversionHelper.ToPrimitive(idxV, st.heap).toStringSet
+          else Set[AbsStr]()
+        val v1 = Helper.propLoad(objV, absStrSet, st.heap)
+        (v1, idxExcSet)
+      }
+      case CFGThis(ir) =>
+        (st.context.thisBinding, ExcSetEmpty)
+      case CFGBin(ir, expr1, op, expr2) => {
+        val (v1, excSet1) = V(expr1, st)
+        val (v2, excSet2) = V(expr2, st)
+        (v1, v2) match {
+          case _ if v1.isBottom => (AbsValue.Bot, excSet1)
+          case _ if v2.isBottom => (AbsValue.Bot, excSet1 ++ excSet2)
+          case _ =>
+            val h = st.heap
+            op.name match {
+              case "|" => (Helper.bopBitOr(v1, v2), excSet1 ++ excSet2)
+              case "&" => (Helper.bopBitAnd(v1, v2), excSet1 ++ excSet2)
+              case "^" => (Helper.bopBitXor(v1, v2), excSet1 ++ excSet2)
+              case "<<" => (Helper.bopLShift(v1, v2), excSet1 ++ excSet2)
+              case ">>" => (Helper.bopRShift(v1, v2), excSet1 ++ excSet2)
+              case ">>>" => (Helper.bopURShift(v1, v2), excSet1 ++ excSet2)
+              case "+" => (Helper.bopPlus(v1, v2), excSet1 ++ excSet2)
+              case "-" => (Helper.bopMinus(v1, v2), excSet1 ++ excSet2)
+              case "*" => (Helper.bopMul(v1, v2), excSet1 ++ excSet2)
+              case "/" => (Helper.bopDiv(v1, v2), excSet1 ++ excSet2)
+              case "%" => (Helper.bopMod(v1, v2), excSet1 ++ excSet2)
+              case "==" => (Helper.bopEqBetter(h, v1, v2), excSet1 ++ excSet2)
+              case "!=" => (Helper.bopNeq(h, v1, v2), excSet1 ++ excSet2)
+              case "===" => (Helper.bopSEq(h, v1, v2), excSet1 ++ excSet2)
+              case "!==" => (Helper.bopSNeq(h, v1, v2), excSet1 ++ excSet2)
+              case "<" => (Helper.bopLess(v1, v2), excSet1 ++ excSet2)
+              case ">" => (Helper.bopGreater(v1, v2), excSet1 ++ excSet2)
+              case "<=" => (Helper.bopLessEq(v1, v2), excSet1 ++ excSet2)
+              case ">=" => (Helper.bopGreaterEq(v1, v2), excSet1 ++ excSet2)
+              case "instanceof" =>
+                val locSet1 = v1.locset
+                val locSet2 = v2.locset
+                val locSet3 = locSet2.filter((l) => AT ⊑ st.heap.hasInstance(l))
+                val protoVal = locSet3.foldLeft(AbsValue.Bot)((v, l) => {
+                  v ⊔ st.heap.get(l).Get("prototype", st.heap)
+                })
+                val locSet4 = protoVal.locset
+                val locSet5 = locSet2.filter((l) => AF ⊑ st.heap.hasInstance(l))
+                val b1 = locSet1.foldLeft[AbsValue](AbsValue.Bot)((tmpVal1, loc1) => {
+                  locSet4.foldLeft[AbsValue](tmpVal1)((tmpVal2, loc2) =>
+                    tmpVal2 ⊔ Helper.inherit(st.heap, loc1, loc2))
+                })
+                val b2 =
+                  if (!v1.pvalue.isBottom && !locSet4.isBottom) AbsValue(AF)
+                  else AbsValue.Bot
+                val excSet3 =
+                  if (!v2.pvalue.isBottom || !locSet5.isBottom || !protoVal.pvalue.isBottom) Set(TypeError)
+                  else ExcSetEmpty
+
+                val b = b1 ⊔ b2
+                val excSet = excSet1 ++ excSet2 ++ excSet3
+                (b, excSet)
+              case "in" => {
+                val str = TypeConversionHelper.ToString(v1, st.heap)
+                val absB = v2.locset.foldLeft(AB)((tmpAbsB, loc) => {
+                  tmpAbsB ⊔ st.heap.get(loc).HasProperty(str, st.heap)
+                })
+                val b = AbsValue(absB)
+                val excSet3 =
+                  if (!v2.pvalue.isBottom) Set(TypeError)
+                  else ExcSetEmpty
+
+                val excSet = excSet1 ++ excSet2 ++ excSet3
+                (b, excSet)
+              }
             }
-          }
+        }
       }
-    }
-    case CFGUn(ir, op, expr) => {
-      val (v, excSet) = V(expr, st)
-      op.name match {
-        case "void" => (Helper.uVoid(v), excSet)
-        case "+" => (Helper.uopPlus(v), excSet)
-        case "-" => (Helper.uopMinusBetter(st.heap, v), excSet)
-        case "~" => (Helper.uopBitNeg(v), excSet)
-        case "!" => (Helper.uopNeg(v), excSet)
-        case "typeof" =>
-          expr match {
-            case CFGVarRef(_, x) =>
-              val absStr1 = TypeConversionHelper.typeTag(v, st.heap)
-              val absStr2 =
-                if (excSet.contains(ReferenceError)) AbsStr("undefined")
-                else AbsStr.Bot
-              val absStr = absStr1 ⊔ absStr2
-              (AbsValue(absStr), ExcSetEmpty)
-            case _ =>
-              val absStr = TypeConversionHelper.typeTag(v, st.heap)
-              (AbsValue(absStr), excSet)
-          }
+      case CFGUn(ir, op, expr) => {
+        val (v, excSet) = V(expr, st)
+        op.name match {
+          case "void" => (Helper.uVoid(v), excSet)
+          case "+" => (Helper.uopPlus(v), excSet)
+          case "-" => (Helper.uopMinusBetter(st.heap, v), excSet)
+          case "~" => (Helper.uopBitNeg(v), excSet)
+          case "!" => (Helper.uopNeg(v), excSet)
+          case "typeof" =>
+            expr match {
+              case CFGVarRef(_, x) =>
+                val absStr1 = TypeConversionHelper.typeTag(v, st.heap)
+                val absStr2 =
+                  if (excSet.contains(ReferenceError)) AbsStr("undefined")
+                  else AbsStr.Bot
+                val absStr = absStr1 ⊔ absStr2
+                (AbsValue(absStr), ExcSetEmpty)
+              case _ =>
+                val absStr = TypeConversionHelper.typeTag(v, st.heap)
+                (AbsValue(absStr), excSet)
+            }
+        }
       }
-    }
-    case CFGInternalValue(ir, name) => getInternalValue(name) match {
-      case Some(value) => (value, ExcSetEmpty)
-      case None =>
-        excLog.signal(IRSemanticsNotYetImplementedError(ir))
-        (AbsValue.Bot, ExcSetEmpty)
-    }
-    case CFGVal(ejsVal) =>
-      val pvalue: AbsPValue = ejsVal match {
-        case EJSNumber(_, num) => AbsPValue(num)
-        case EJSString(str) => AbsPValue(str)
-        case EJSBool(bool) => AbsPValue(bool)
-        case EJSNull => AbsPValue(Null)
-        case EJSUndef => AbsPValue(Undef)
+      case CFGInternalValue(ir, name) => getInternalValue(name) match {
+        case Some(value) => (value, ExcSetEmpty)
+        case None =>
+          excLog.signal(IRSemanticsNotYetImplementedError(ir))
+          (AbsValue.Bot, ExcSetEmpty)
       }
-      (AbsValue(pvalue), ExcSetEmpty)
+      case CFGVal(ejsVal) =>
+        val pvalue: AbsPValue = ejsVal match {
+          case EJSNumber(_, num) => AbsPValue(num)
+          case EJSString(str) => AbsPValue(str)
+          case EJSBool(bool) => AbsPValue(bool)
+          case EJSNull => AbsPValue(Null)
+          case EJSUndef => AbsPValue(Undef)
+        }
+        (AbsValue(pvalue), ExcSetEmpty)
+    }
   }
 
   def B(expr: CFGExpr, st: AbsState, excSt: AbsState): (AbsState, AbsState) = {
