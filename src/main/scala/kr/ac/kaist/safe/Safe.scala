@@ -16,6 +16,7 @@ import kr.ac.kaist.safe.errors.SafeException
 import kr.ac.kaist.safe.errors.error.{ NoCmdError, NoInputError }
 import kr.ac.kaist.safe.phase._
 import kr.ac.kaist.safe.util._
+import kr.ac.kaist.safe.analyzer._
 
 object Safe {
   ////////////////////////////////////////////////////////////////////////////////
@@ -39,6 +40,10 @@ object Safe {
         Console.err.println(ex.toString)
         Console.err.println(ex.getStackTrace.mkString(LINE_SEP))
     }
+
+    Semantics.output.write("]")
+    Semantics.output.flush()
+    Semantics.output.close()
   }
 
   def apply[Result](

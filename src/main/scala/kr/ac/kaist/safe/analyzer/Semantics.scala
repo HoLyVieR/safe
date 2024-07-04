@@ -21,6 +21,7 @@ import kr.ac.kaist.safe.nodes.cfg._
 import kr.ac.kaist.safe.util.{ NodeUtil, EJSNumber, EJSString, EJSBool, EJSNull, EJSUndef, AllocSite, Recency, Recent, Old }
 import kr.ac.kaist.safe.LINE_SEP
 import scala.collection.mutable.{ Map => MMap }
+import java.io._
 
 case class Semantics(
     cfg: CFG,
@@ -107,11 +108,14 @@ case class Semantics(
           map2 + (cp2 -> (data ⊔ oldData))
       }
     }
-    val irCp1 = cp1.block.func.ir
-    val irCp2 = cp2.block.func.ir
-    println("Add IPEdge")
-    println("From :" + irCp1.fileName + ":" + irCp1.line + ":" + irCp1.offset)
-    println("To : " + irCp2.fileName + ":" + irCp2.line + ":" + irCp2.offset)
+
+    if (cp1.block.isInstanceOf[Call] && cp2.block.isInstanceOf[Entry]) {
+      val irCp1 = cp1.block.func.ir
+      val irCp2 = cp2.block.func.ir
+
+      Semantics.output.write("[\"" + irCp1.fileName + ":" + irCp1.begin + "\",\"" + irCp2.fileName + ":" + irCp2.begin + "\"],\n")
+    }
+
     ipSuccMap += (cp1 -> updatedSuccMap)
   }
 
@@ -1705,6 +1709,12 @@ case class EdgeData(allocs: AllocLocSet, env: AbsLexEnv, thisBinding: AbsValue) 
     }
   }
 }
+
+object Semantics {
+  val output = new BufferedWriter(new OutputStreamWriter(new FileOutputStream("output.json")))
+  output.write("[\n")
+}
+
 object EdgeData {
   val Bot: EdgeData = EdgeData(AllocLocSet.Bot, AbsLexEnv.Bot, AbsValue.Bot)
 }
