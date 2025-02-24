@@ -137,8 +137,8 @@ object DefaultGlobalEnvRec extends GlobalEnvRecDomain {
             // 4. If value is false, then
             //    a. If S is false, return the value undefined,
             //       otherwise throw a ReferenceError exception.
-            if (strict) { excSet += ReferenceError; AbsValue.Bot }
-            else { AbsUndef.Top }
+            if (strict) { excSet += ReferenceError; AbsPValue.Top }
+            else { AbsPValue.Top }
           } else AbsValue.Bot
         val t =
           if (AT ⊑ b) {
@@ -146,6 +146,7 @@ object DefaultGlobalEnvRec extends GlobalEnvRecDomain {
             //    bindings, passing N for the argument.
             heap.get(GLOBAL_LOC).Get(name, heap)
           } else AbsValue.Bot
+
         val retV = f ⊔ t
         (retV, excSet)
     }

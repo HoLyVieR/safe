@@ -6,3 +6,4 @@ ENV SAFE_HOME=/usr/src/safe
 COPY ./project/ /usr/src/safe/project/
 RUN sbt --version
 ENTRYPOINT ["sbt", "compile"]
+

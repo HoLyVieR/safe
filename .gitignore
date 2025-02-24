@@ -30,4 +30,6 @@ doc/icse-demo/main.pdf
 safe.iml
 debugger/
 output.json
+node_modules/
+package-lock.json
 

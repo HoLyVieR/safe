@@ -186,6 +186,7 @@ object TypeConversionHelper {
   ////////////////////////////////////////////////////////////////
   def ToObject(pvalue: AbsPValue): (AbsObj, Set[Exception]) = {
     val excSet = CheckObjectCoercible(pvalue)
+
     val obj3 = pvalue.numval.fold(AbsObj.Bot) { AbsObj.newNumberObj(_) }
     val obj4 = pvalue.boolval.fold(AbsObj.Bot) { AbsObj.newBooleanObj(_) }
     val obj5 = pvalue.strval.fold(AbsObj.Bot) { AbsObj.newStringObj(_) }
