@@ -1,6 +1,5 @@
 #!/bin/bash
 
-<<<<<<< HEAD
 ANALYSIS_FILE="$2"
 ANALYSIS_FOLDER="$ANALYSIS_FILE"
 
