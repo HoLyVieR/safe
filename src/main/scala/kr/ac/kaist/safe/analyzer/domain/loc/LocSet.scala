@@ -78,22 +78,22 @@ object LocSet extends AbsDomain[Loc] {
     }
 
     def filter(f: Loc => Boolean): Elem = this match {
-      case Top => throw LocTopGammaError // TODO LSet(locSet.filter(f))
+      case Top => this // TODO LSet(locSet.filter(f))
       case LSet(set) => LSet(set.filter(f))
     }
 
     def foreach(f: Loc => Unit): Unit = this match {
-      case Top => throw LocTopGammaError // TODO locSet.foreach(f)
+      case Top => this // TODO locSet.foreach(f)
       case LSet(set) => set.foreach(f)
     }
 
     def foldLeft[T](initial: T)(f: (T, Loc) => T): T = this match {
-      case Top => throw LocTopGammaError // TODO locSet.foldLeft(initial)(f)
+      case Top => initial // TODO locSet.foldLeft(initial)(f)
       case LSet(set) => set.foldLeft(initial)(f)
     }
 
     def map[T](f: Loc => T): Set[T] = this match {
-      case Top => throw LocTopGammaError // TODO locSet.map(f)
+      case Top => Set[T]() // TODO locSet.map(f)
       case LSet(set) => set.map(f)
     }
 
